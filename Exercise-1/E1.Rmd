@@ -1,0 +1,54 @@
+---
+title: "E1"
+author: "Felix Shier"
+date: "17/01/2022"
+output: html_document
+editor_options: 
+  chunk_output_type: inline
+---
+
+# Data Exploration and Hypothesis Test
+
+## RQ1: Statistical Summary
+
+```{r}
+# import libraries
+```
+
+
+```{r}
+# import data
+listings <- read.csv("listings.csv")
+```
+```{r}
+# data head
+head(listings)
+```
+
+In the summary statistics below, we can see some interesting things about the listing price column in the dataset. Specifically, we can see that the mean price is significantly higher than the median price which implies there are some outliers in the dataset which are skewing the data. Furthermore, we can see that the max price is significantly higher than the third quartile which confirms that there are outliers in the dataset.
+
+```{r}
+# summary statistics
+summary(listings$price)
+```
+
+Plotting the density of the listing prices below, it can clearly be seen that the dataset is skewed to the left. This shows that many of the listings in the dataset have prices at the lower end of the price range and there are only a few listings at the higher end of the price range.
+
+```{r}
+# plot listing price density
+plot(density(listings$price),
+     main = "Listing Price Density",
+     xlab = "Listing Price",
+     ylab = "Density")
+```
+ In fact, it can be seen in the code block below that 90% of the listing prices are below 214, 99% of the listing prices are below 900, and 99.9% of the listing prices are below 2499, yet the max listing price in the dataset in 13294.
+ 
+```{r}
+# 90, 99, 99.9 percentiles
+quantile(listings$price, c(.9, .99, .999)) 
+```
+## RQ2: Statistical Test
+
+```{r}
+
+```
