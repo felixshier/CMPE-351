@@ -1,5 +1,5 @@
 ---
-title: "E1"
+title: "Exercise 1"
 author: "Felix Shier"
 date: "17/01/2022"
 output: html_document
@@ -14,8 +14,6 @@ editor_options:
 ```{r}
 # import libraries
 ```
-
-
 ```{r}
 # import data
 listings <- read.csv("listings.csv")
@@ -47,8 +45,92 @@ plot(density(listings$price),
 # 90, 99, 99.9 percentiles
 quantile(listings$price, c(.9, .99, .999)) 
 ```
-## RQ2: Statistical Test
+## RQ2: Statistical Hypothesis Test 1
+
+### Question
+Can room type predict listing price?
+
+### Null Hypothesis (H0)
+Room type has no effect on listing price.
+
+### Experiment
+A Kruskal–Wallis one-way analysis of variance test can be performed to answer this question as it is an effective method to determine if there are any statistically significant differences between two or more non-parametric groups.
 
 ```{r}
-
+# Kruskal–Wallis one-way analysis of variance test
+df1 = data.frame(listings)
+df1 = df1[c("room_type", "price")]
+kw_results1 <- kruskal.test(price ~ room_type, data = df1)
+kw_results1
 ```
+### Results
+As can be seen from the Kruskal–Wallis one-way analysis of variance test results, the p value is less than 2.2e-16; hence, we can reject the null hypothesis and accurately say that room type has an effect on listing price.
+
+## RQ3: Statistical Hypothesis Test 2
+
+```{r}
+unique(listings$neighbourhood)
+```
+### Question
+Can neighbourhood predict listing price?
+
+### Null Hypothesis (H0)
+Neighbourhood has no effect on listing price.
+
+### Experiment
+A Kruskal–Wallis one-way analysis of variance test can be performed to answer this question as it is an effective method to determine if there are any statistically significant differences between two or more non-parametric groups.
+
+```{r}
+# Kruskal–Wallis one-way analysis of variance test
+df2 = data.frame(listings)
+df2 = df2[c("neighbourhood", "price")]
+kw_results2 <- kruskal.test(price ~ neighbourhood, data = df2)
+kw_results2
+```
+### Results
+As can be seen from the summary of the Kruskal–Wallis one-way analysis of variance test results, the p value is less than 2.2e-16; hence, we can reject the null hypothesis and accurately say that neighbourhood has an effect on listing price.
+
+## RQ4: Correlation Analysis
+
+### Correlation Analysis 1
+
+The first two attributes who's correlation I would like to analyze are the latitude and price of hotel rooms. I believe these attributes are interesting to analyze because perhaps it can be determined where one should focus their search when looking for a cheap place to stay in Montreal.
+
+```{r}
+# get hotel data
+hotel_data = listings[listings$room_type == "Hotel room",]
+```
+```{r}
+# plot hotel latitude vs price
+plot(hotel_data$latitude, hotel_data$price,
+     main = "Hotel Latitude vs. Price",
+     xlab = "Latitude",
+     ylab = "Price")
+```
+```{r}
+# correlation between hotel latitude and price
+cor(hotel_data$latitude, hotel_data$price, use = "complete.obs")
+```
+As can be seen above in the plot and in the correlation calculation, there is a weak negative correlation between hotel latitude and price which implies hotels are cheaper further north in the city.
+
+### Correlation Analysis 2
+
+The second two attributes who's correlation I would like to analyze are total reviews and price of private rooms. I believe these attributes are interesting to analyze because perhaps it can tell us more about the types of people that are renting from airbnb. Specifically, I am wondering if perhaps those who spend less on an airbnb are more likely to leave a review.
+
+```{r}
+# get private room data
+private_room_data = listings[listings$room_type == "Entire home/apt",]
+```
+```{r}
+# plot private room total reviews vs. price
+plot(private_room_data$number_of_reviews, private_room_data$price,
+     main = "Private Room Number of Reviews vs. Price",
+     xlab = "Number of Reviews",
+     ylab = "Price")
+```
+
+```{r}
+# determine correlation between private room number of reviews and price
+cor(private_room_data$number_of_reviews, private_room_data$price, use = "complete.obs")
+```
+As can be seen above in the plot and in the correlation calculation, there is no correlation between a private room's number of reviews and it's price. However, it can be noted that the most expensive private rooms all have minimal reviews and the private rooms with the most reviews are all inexpensive.
