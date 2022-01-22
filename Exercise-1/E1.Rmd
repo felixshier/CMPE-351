@@ -7,12 +7,15 @@ editor_options:
   chunk_output_type: inline
 ---
 
-# Data Exploration and Hypothesis Test
-
-## RQ1: Statistical Summary
+# Data Exploration and Hypothesis 
+```{r}
+# imports
+library(ggplot2)
+```
 
 ```{r}
-# import libraries
+# alter plot size
+knitr::opts_chunk$set(fig.width=20, fig.height=8) 
 ```
 ```{r}
 # import data
@@ -23,28 +26,226 @@ listings <- read.csv("listings.csv")
 head(listings)
 ```
 
-In the summary statistics below, we can see some interesting things about the listing price column in the dataset. Specifically, we can see that the mean price is significantly higher than the median price which implies there are some outliers in the dataset which are skewing the data. Furthermore, we can see that the max price is significantly higher than the third quartile which confirms that there are outliers in the dataset.
+## RQ1: Statistical Summary
+
+In the summary statistics below, we can see some interesting things about the listing price column in the dataset. Specifically, we can see that the mean price of 125.6 is significantly higher than the median price of 85.0 which implies there are some outliers in the dataset which are skewing the data. Furthermore, we can see that the max price of 13,294.0 is significantly higher than the third quartile price of 130.0 which confirms that there are outliers in the dataset.
 
 ```{r}
 # summary statistics
 summary(listings$price)
 ```
 
-Plotting the density of the listing prices below, it can clearly be seen that the dataset is skewed to the left. This shows that many of the listings in the dataset have prices at the lower end of the price range and there are only a few listings at the higher end of the price range.
+```{r}
+# find number of missing listing prices
+sum(is.na(listings$price))
+```
+Additionally, we can see that there are no missing listing prices in the dataset.
+
+We can get a better sense of the listing price data that we are working with by plotting the histogram of the listing prices.
 
 ```{r}
-# plot listing price density
-plot(density(listings$price),
-     main = "Listing Price Density",
+# plot histogram of all listing prices
+hist(listings$price,
+     main = "Histogram of Listing Prices",
      xlab = "Listing Price",
-     ylab = "Density")
+     ylab = "Frequency",
+     col = "orangered")
 ```
- In fact, it can be seen in the code block below that 90% of the listing prices are below 214, 99% of the listing prices are below 900, and 99.9% of the listing prices are below 2499, yet the max listing price in the dataset in 13294.
+Actually, it turns out that the histogram in that view is not so useful after all. Perhaps by looking at different percentiles of the listing price data we can get a better understanding of the distribution of the data that we are working with.
  
 ```{r}
 # 90, 99, 99.9 percentiles
 quantile(listings$price, c(.9, .99, .999)) 
 ```
+As seen above, 90% of the listing prices are below 214, 99% of the listing prices are below 900, and 99.9% of the listing prices are below 2499. Lets look at the histogram for each of these percentiles to once again get a better understanding of the distribution of the data that we are working with.
+
+```{r}
+# create 1x2 figure
+par(mfrow=c(1,2))
+
+# plot histogram of bottom 99.9% of listing prices
+hist(listings$price[listings$price <= 2499],
+     main = "Bottom 99.9% of Listing Prices",
+     xlab = "Listing Price",
+     ylab = "Frequency",
+     col = "firebrick")
+
+# plot histogram of top 0.1% of listing prices
+hist(listings$price[listings$price > 2499],
+     main = "Top 0.1% of Listing Prices",
+     xlab = "Listing Price",
+     ylab = "Frequency",
+     col = "burlywood")
+```
+```{r}
+# create 1x2 figure
+par(mfrow=c(1,2))
+
+# plot histogram of bottom 99% of listing prices
+hist(listings$price[listings$price <= 900],
+     main = "Bottom 99% of Listing Prices",
+     xlab = "Listing Price",
+     ylab = "Frequency",
+     col = "khaki")
+
+# plot histogram of top 1% of listing prices
+hist(listings$price[listings$price > 900],
+     main = "Top 1% of Listing Prices",
+     xlab = "Listing Price",
+     ylab = "Frequency",
+     col = "seashell")
+```
+```{r}
+# create 1x2 figure
+par(mfrow=c(1,2))
+
+# plot histogram of bottom 90% of listing prices
+hist(listings$price[listings$price <= 214],
+     main = "Bottom 90% of Listing Prices",
+     xlab = "Listing Price",
+     ylab = "Frequency",
+     col = "tan")
+
+# plot histogram of top 10% of listing prices
+hist(listings$price[listings$price > 214],
+     main = "Top 10% of Listing Prices",
+     xlab = "Listing Price",
+     ylab = "Frequency",
+     col = "peachpuff")
+```
+
+By analyzing these plots above, we can get a good sense of the listings prices available in Montreal. Specifically, we can see why the median value of 85.0 is a much better representation of the average listing price than the mean value of 125.6. Furthermore, it is interesting to see just how such a small number of outliers are able to have such an influence on average price.
+
+Let's now look at the listing price distributions for different room types as they are likely quite different.
+
+```{r}
+# boxplot listing price by room type
+boxplot(price ~ room_type, data = listings,
+        main = "Listing Price by Room Type")
+```
+
+Again, the outliers in this dataset make these graphs a little difficult to interpret, so let's look at different percentiles.
+
+```{r}
+# create 1x2 figure
+par(mfrow=c(1,2))
+
+# boxplot bottom 99.9% of listing prices by room type
+boxplot(price ~ room_type, data = listings[listings$price <= 2499,],
+        main = "Bottom 99.9% of Listing Prices",
+        xlab = "Room Type",
+        ylab = "Listing Price",
+        col = "firebrick")
+
+# boxplot top 0.1% of listing prices by room type
+boxplot(price ~ room_type, data = listings[listings$price > 2499,],
+        main = "Top 0.1% of Listing Prices",
+        xlab = "Room Type",
+        ylab = "Listing Price",
+        col = "burlywood")
+```
+```{r}
+# create 1x2 figure
+par(mfrow=c(1,2))
+
+# boxplot bottom 99% of listing prices by room type
+boxplot(price ~ room_type, data = listings[listings$price <= 900,],
+        main = "Bottom 99% of Listing Prices",
+        xlab = "Room Type",
+        ylab = "Listing Price",
+        col = "khaki")
+
+# boxplot top 1% of listing prices by room type
+boxplot(price ~ room_type, data = listings[listings$price > 900,],
+        main = "Top 1% of Listing Prices",
+        xlab = "Room Type",
+        ylab = "Listing Price",
+        col = "seashell")
+```
+```{r}
+# create 1x2 figure
+par(mfrow=c(1,2))
+
+# boxplot bottom 90% of listing prices by room type
+boxplot(price ~ room_type, data = listings[listings$price <= 214,],
+        main = "Bottom 90% of Listing Prices",
+        xlab = "Room Type",
+        ylab = "Listing Price",
+        col = "tan")
+
+# boxplot top 10% of listing prices by room type
+boxplot(price ~ room_type, data = listings[listings$price > 214,],
+        main = "Top 10% of Listing Prices",
+        xlab = "Room Type",
+        ylab = "Listing Price",
+        col = "peachpuff")
+```
+Some interesting conclusions can be drawn from these plots, for example, hotels are the most expensive of the bottom 99.9% of listings but none can be found in the top 1%. Furthermore, shared rooms are the most economical approach of the bottom 90% on average with a mean price of under 50.
+
+Now let's see where these listings can be found geographically.
+
+```{r}
+# plot latitude vs longitude with color scale of listing price
+ggplot(listings, aes(longitude, latitude)) + 
+  geom_point(aes(color = price)) +
+  scale_color_viridis_c() + 
+  ggtitle("Listings")
+```
+
+Again, the outliers make it different to analyze the plot so let's take a look at the different percentiles. 
+
+```{r}
+# create 1x2 figure
+par(mfrow=c(1,2))
+
+# plot latitude vs longitude of bottom 99.9% with color scale of listing price
+ggplot(listings[listings$price <= 2499,], aes(longitude, latitude)) + 
+  geom_point(aes(color = price)) +
+  scale_color_viridis_c() + 
+  ggtitle("Bottom 99.9% of Listings by Price")
+
+# plot latitude vs longitude of top 0.1% with color scale of listing price
+ggplot(listings[listings$price > 2499,], aes(longitude, latitude)) + 
+  geom_point(aes(color = price)) +
+  scale_color_viridis_c() + 
+  ggtitle("Top 0.1% of Listings by Price")
+```
+```{r}
+# create 1x2 figure
+par(mfrow=c(1,2))
+
+# plot latitude vs longitude of bottom 99% with color scale of listing price
+ggplot(listings[listings$price <= 900,], aes(longitude, latitude)) + 
+  geom_point(aes(color = price)) +
+  scale_color_viridis_c() + 
+  ggtitle("Bottom 99% of Listings by Price")
+
+# plot latitude vs longitude of top 1% with color scale of listing price
+ggplot(listings[listings$price > 900,], aes(longitude, latitude)) + 
+  geom_point(aes(color = price)) +
+  scale_color_viridis_c() + 
+  ggtitle("Top 1% of Listings by Price")
+```
+
+```{r}
+# create 1x2 figure
+par(mfrow=c(1,2))
+
+# plot latitude vs longitude of bottom 90% with color scale of listing price
+ggplot(listings[listings$price <= 214,], aes(longitude, latitude)) + 
+  geom_point(aes(color = price)) +
+  scale_color_viridis_c() + 
+  ggtitle("Bottom 90% of Listings by Price")
+
+# plot latitude vs longitude of top 10% with color scale of listing price
+ggplot(listings[listings$price > 214,], aes(longitude, latitude)) + 
+  geom_point(aes(color = price)) +
+  scale_color_viridis_c() + 
+  ggtitle("Top 10% of Listings by Price")
+```
+
+At this view it is difficult to determine if there is any relation between location and price. Perhaps this can be investigated further with a correlation analysis in RQ4.
+
 ## RQ2: Statistical Hypothesis Test 1
 
 ### Question
@@ -68,9 +269,6 @@ As can be seen from the Kruskal–Wallis one-way analysis of variance test resul
 
 ## RQ3: Statistical Hypothesis Test 2
 
-```{r}
-unique(listings$neighbourhood)
-```
 ### Question
 Can neighbourhood predict listing price?
 
@@ -94,28 +292,355 @@ As can be seen from the summary of the Kruskal–Wallis one-way analysis of vari
 
 ### Correlation Analysis 1
 
-The first two attributes who's correlation I would like to analyze are the latitude and price of hotel rooms. I believe these attributes are interesting to analyze because perhaps it can be determined where one should focus their search when looking for a cheap place to stay in Montreal.
+Going back to the exploratory analysis performed in RQ1, the first correlation analysis I would like to perform is the correlation between listing location and price. More specifically, I will perform a correlation analysis separately for latitude and longitude. I believe these attributes are interesting to analyze because perhaps it can be determined where one should focus their search when looking for a cheap place to stay in Montreal.
 
 ```{r}
-# get hotel data
-hotel_data = listings[listings$room_type == "Hotel room",]
+# plot listing latitude vs price
+plot(listings$latitude, listings$price,
+     main = "Listing Latitude vs. Price",
+     xlab = "Latitude",
+     ylab = "Price")
 ```
 ```{r}
-# plot hotel latitude vs price
-plot(hotel_data$latitude, hotel_data$price,
+# correlation between listing latitude and price
+cor(listings$latitude, listings$price, use = "complete.obs")
+```
+As can be seen above in the plot and in the correlation calculation, there is no correlation between listing latitude and price.
+
+```{r}
+# plot listing longitude vs price
+plot(listings$longitude, listings$price,
+     main = "Listing longitude vs. Price",
+     xlab = "Longitude",
+     ylab = "Price")
+```
+```{r}
+# correlation between listing longitude and price
+cor(listings$longitude, listings$price, use = "complete.obs")
+```
+As can be seen above in the plot and in the correlation calculation, there is no correlation between listing longitude and price.
+
+It is possible; however, that the lack of correlation is due to the fact that the listings data is filled with many different room types. Perhaps if we investigate the relationship between each individual room type and the listing price something will be found.
+
+```{r}
+# get 'Entire home/apt' data
+homes <- listings[listings$room_type == "Entire home/apt",]
+```
+```{r}
+# plot latitude vs longitude of homes with color scale of listing price
+ggplot(homes, aes(longitude, latitude)) + 
+  geom_point(aes(color = price)) +
+  scale_color_viridis_c() + 
+  ggtitle("Homes")
+```
+```{r}
+# plot home latitude vs price
+plot(homes$latitude, homes$price,
+     main = "Home Latitude vs. Price",
+     xlab = "Latitude",
+     ylab = "Price")
+```
+```{r}
+# correlation between home latitude and price
+cor(homes$latitude, homes$price, use = "complete.obs")
+```
+As can be seen above in the plot and in the correlation calculation, there is no correlation between home latitude and price.
+
+```{r}
+# plot home longitude vs price
+plot(homes$longitude, homes$price,
+     main = "Home longitude vs. Price",
+     xlab = "Longitude",
+     ylab = "Price")
+```
+```{r}
+# correlation between listing longitude and price
+cor(homes$longitude, homes$price, use = "complete.obs")
+```
+As can be seen above in the plot and in the correlation calculation, there is no correlation between home longitude and price.
+
+```{r}
+# get 'Hotel room' data
+hotels <- listings[listings$room_type == "Hotel room",]
+```
+```{r}
+# plot latitude vs longitude of hotels with color scale of listing price
+ggplot(hotels, aes(longitude, latitude)) + 
+  geom_point(aes(color = price)) +
+  scale_color_viridis_c() + 
+  ggtitle("Hotels")
+```
+```{r}
+# plot hotels latitude vs price
+plot(hotels$latitude, hotels$price,
      main = "Hotel Latitude vs. Price",
      xlab = "Latitude",
      ylab = "Price")
 ```
 ```{r}
 # correlation between hotel latitude and price
-cor(hotel_data$latitude, hotel_data$price, use = "complete.obs")
+cor(hotels$latitude, hotels$price, use = "complete.obs")
 ```
-As can be seen above in the plot and in the correlation calculation, there is a weak negative correlation between hotel latitude and price which implies hotels are cheaper further north in the city.
+As can be seen above in the plot and in the correlation calculation, there is a weak negative correlation between hotel latitude and price.
+
+```{r}
+# plot hotels longitude vs price
+plot(hotels$longitude, hotels$price,
+     main = "Hotel Longitude vs. Price",
+     xlab = "Longitude",
+     ylab = "Price")
+```
+```{r}
+# correlation between hotels longitude and price
+cor(hotels$longitude, hotels$price, use = "complete.obs")
+```
+As can be seen above in the plot and in the correlation calculation, there is no correlation between hotel longitude and price.
+
+```{r}
+# get 'Private room' data
+singles <- listings[listings$room_type == "Private room",]
+```
+```{r}
+# plot latitude vs longitude of private rooms with color scale of listing price
+ggplot(singles, aes(longitude, latitude)) + 
+  geom_point(aes(color = price)) +
+  scale_color_viridis_c() + 
+  ggtitle("Private Rooms")
+```
+```{r}
+# plot single room latitude vs price
+plot(singles$latitude, singles$price,
+     main = "Private Room Latitude vs. Price",
+     xlab = "Latitude",
+     ylab = "Price")
+```
+```{r}
+# correlation between private room latitude and price
+cor(singles$latitude, singles$price, use = "complete.obs")
+```
+As can be seen above in the plot and in the correlation calculation, there is no correlation between private room latitude and price.
+
+```{r}
+# plot private room longitude vs price
+plot(singles$longitude, singles$price,
+     main = "Private Room Longitude vs. Price",
+     xlab = "Longitude",
+     ylab = "Price")
+```
+```{r}
+# correlation between private room longitude and price
+cor(singles$longitude, singles$price, use = "complete.obs")
+```
+As can be seen above in the plot and in the correlation calculation, there is no correlation between private room longitude and price.
+
+```{r}
+# get 'Shared room' data
+shared <- listings[listings$room_type == "Shared room",]
+```
+```{r}
+# plot latitude vs longitude of shared rooms with color scale of listing price
+ggplot(shared, aes(longitude, latitude)) + 
+  geom_point(aes(color = price)) +
+  scale_color_viridis_c() + 
+  ggtitle("Shared Rooms")
+```
+```{r}
+# plot shared room latitude vs price
+plot(shared$latitude, shared$price,
+     main = "Shared Room Latitude vs. Price",
+     xlab = "Latitude",
+     ylab = "Price")
+```
+```{r}
+# correlation between shared room latitude and price
+cor(shared$latitude, shared$price, use = "complete.obs")
+```
+As can be seen above in the plot and in the correlation calculation, there is no correlation between shared room latitude and price.
+
+```{r}
+# plot shared room longitude vs price
+plot(shared$longitude, shared$price,
+     main = "Shared Room Longitude vs. Price",
+     xlab = "Longitude",
+     ylab = "Price")
+```
+```{r}
+# correlation between shared room longitude and price
+cor(shared$longitude, shared$price, use = "complete.obs")
+```
+As can be seen above in the plot and in the correlation calculation, there is no correlation between shared room longitude and price.
+
+From the analysis above, it appears that in general there is no correlation between latitude and listing price or longitude and listing price; however, there is a weak negative correlation between hotel latitude and price so if you're looking for a cheap hotel in Montreal, look north!
 
 ### Correlation Analysis 2
 
-The second two attributes who's correlation I would like to analyze are total reviews and price of private rooms. I believe these attributes are interesting to analyze because perhaps it can tell us more about the types of people that are renting from airbnb. Specifically, I am wondering if perhaps those who spend less on an airbnb are more likely to leave a review.
+Looking at the results from the previous correlation analysis has made me think that although there might not be a correlation between lattitude/longitude and listing price, that does not mean that there is not a correlation between location and listing price. For my next correlation analysis, I will create two new attributes called "lat_distance_from_mean" and "long_distance_from_mean" which will store the latitudinal and longitudinal distances from the mean latitude and mean longitude for each listing.
+
+```{r}
+# get means
+mean_lat = mean(listings$latitude)
+mean_long = mean(listings$longitude)
+
+# create new columns
+listings$lat_distance_from_mean = abs(listings$latitude - mean_lat)
+listings$long_distance_from_mean = abs(listings$longitude - mean_long)
+```
+
+```{r}
+# plot listing distance from latitudinal mean vs price
+plot(listings$lat_distance_from_mean, listings$price,
+     main = "Listing Distance from Latitudinal Mean vs. Price",
+     xlab = "Distance from Latitudinal Mean",
+     ylab = "Price")
+```
+```{r}
+# correlation between home latitude and price
+cor(listings$lat_distance_from_mean, listings$price, use = "complete.obs")
+```
+As can be seen above in the plot and in the correlation calculation, there is no correlation between listing distance from latitudinal mean and price.
+
+```{r}
+length(listings$long_distance_from_mean)
+
+# plot listing distance form longitudinal mean vs price
+plot(listings$long_distance_from_mean, listings$price,
+     main = "Listing Distance from Longitudinal Mean vs. Price",
+     xlab = "Distance from Longitudinal Mean",
+     ylab = "Price")
+```
+```{r}
+# correlation between listing distance form longitudinal mean and price
+cor(listings$longitude, listings$price, use = "complete.obs")
+```
+As can be seen above in the plot and in the correlation calculation, there is no correlation between listing distance from longitudinal mean and price.
+
+Again, perhaps some inference can be made by looking at each individual room type.
+
+```{r}
+# get 'Entire home/apt' data
+homes <- listings[listings$room_type == "Entire home/apt",]
+```
+```{r}
+# plot home distance from latitudinal mean vs price
+plot(homes$lat_distance_from_mean, homes$price,
+     main = "Home Distance from Latitudinal Mean vs. Price",
+     xlab = "Distance from Latitudinal Mean",
+     ylab = "Price")
+```
+```{r}
+# correlation between home distance from latitudinal mean and price
+cor(homes$lat_distance_from_mean, homes$price, use = "complete.obs")
+```
+As can be seen above in the plot and in the correlation calculation, there is no correlation between home distance from latitudinal mean and price.
+
+```{r}
+# plot home distance from longitudinal mean vs price
+plot(homes$long_distance_from_mean, homes$price,
+     main = "Home Distance from Longitudinal Mean vs. Price",
+     xlab = "Distance from Longitudinal Mean",
+     ylab = "Price")
+```
+```{r}
+# correlation between home distance from longitudinal mean and price
+cor(homes$long_distance_from_mean, homes$price, use = "complete.obs")
+```
+As can be seen above in the plot and in the correlation calculation, there is no correlation between home distance from longitudinal mean and price.
+
+```{r}
+# get 'Hotel room' data
+hotels <- listings[listings$room_type == "Hotel room",]
+```
+```{r}
+# plot hotel distance from latitudinal mean vs price
+plot(hotels$lat_distance_from_mean, hotels$price,
+     main = "Hotel Distance from Latitudinal Mean vs. Price",
+     xlab = "Distance from Latitudinal Mean",
+     ylab = "Price")
+```
+```{r}
+# correlation between hotel distance from latitudinal mean and price
+cor(hotels$lat_distance_from_mean, hotels$price, use = "complete.obs")
+```
+As can be seen above in the plot and in the correlation calculation, there is no correlation between hotel distance from latitudinal mean and price.
+
+```{r}
+# plot hotel distance from longitudinal mean vs price
+plot(hotels$long_distance_from_mean, hotels$price,
+     main = "Hotel Distance from Longitudinal Mean vs. Price",
+     xlab = "Distance from Longitudinal Mean",
+     ylab = "Price")
+```
+```{r}
+# correlation between hotel distance from longitudinal mean and price
+cor(hotels$long_distance_from_mean, hotels$price, use = "complete.obs")
+```
+As can be seen above in the plot and in the correlation calculation, there is no correlation between hotel distance from longitudinal mean and price.
+
+```{r}
+# get 'Private room' data
+singles <- listings[listings$room_type == "Hotel room",]
+```
+```{r}
+# plot private room distance from latitudinal mean vs price
+plot(singles$lat_distance_from_mean, singles$price,
+     main = "Private Room Distance from Latitudinal Mean vs. Price",
+     xlab = "Distance from Latitudinal Mean",
+     ylab = "Price")
+```
+```{r}
+# correlation between private room distance from latitudinal mean and price
+cor(singles$lat_distance_from_mean, singles$price, use = "complete.obs")
+```
+As can be seen above in the plot and in the correlation calculation, there is no correlation between private room distance from latitudinal mean and price.
+
+```{r}
+# plot private room distance from longitudinal mean vs price
+plot(singles$long_distance_from_mean, singles$price,
+     main = "Private Room Distance from Longitudinal Mean vs. Price",
+     xlab = "Distance from Longitudinal Mean",
+     ylab = "Price")
+```
+```{r}
+# correlation between private room distance from longitudinal mean and price
+cor(singles$long_distance_from_mean, singles$price, use = "complete.obs")
+```
+As can be seen above in the plot and in the correlation calculation, there is no correlation between private room distance from longitudinal mean and price.
+
+```{r}
+# get 'Shared room' data
+shared <- listings[listings$room_type == "Shared room",]
+```
+```{r}
+# plot shared room distance from latitudinal mean vs price
+plot(shared$lat_distance_from_mean, shared$price,
+     main = "Shared Room Distance from Latitudinal Mean vs. Price",
+     xlab = "Distance from Latitudinal Mean",
+     ylab = "Price")
+```
+```{r}
+# correlation between shared room distance from latitudinal mean and price
+cor(shared$lat_distance_from_mean, shared$price, use = "complete.obs")
+```
+As can be seen above in the plot and in the correlation calculation, there is no correlation between shared room distance from latitudinal mean and price.
+
+```{r}
+# plot shared room distance from longitudinal mean vs price
+plot(shared$long_distance_from_mean, shared$price,
+     main = "Shared Room Distance from Longitudinal Mean vs. Price",
+     xlab = "Distance from Longitudinal Mean",
+     ylab = "Price")
+```
+```{r}
+# correlation between private room distance from longitudinal mean and price
+cor(shared$long_distance_from_mean, shared$price, use = "complete.obs")
+```
+As can be seen above in the plot and in the correlation calculation, there is no correlation between shared room distance from longitudinal mean and price.
+
+Contrary to my initial belief, no correlation was found between the distance from the mean latitude or longitude.
+
+### Correlation Analysis 3
+
+The final two attributes who's correlation I would like to analyze are total reviews and price of private rooms. I believe these attributes are interesting to analyze because perhaps it can tell us more about the types of people that are renting from airbnb. Specifically, I am wondering if perhaps those who spend less on an airbnb are more likely to leave a review.
 
 ```{r}
 # get private room data
