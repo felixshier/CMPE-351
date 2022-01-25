@@ -1,0 +1,58 @@
+---
+title: "A1"
+author: "Felix Shier"
+date: "24/01/2022"
+output: html_document
+---
+
+# Part 1: Feature Selection and Multicollinearity Analysis
+
+```{r}
+# imports
+require(ggplot2)
+require(stringr)
+require(caret)
+require(plyr)
+require(data.table)
+require(dplyr)
+```
+```{r}
+# alter plot size
+knitr::opts_chunk$set(fig.width=20, fig.height=8) 
+```
+```{r}
+# import data
+filenames <- list.files("Assignment1-dataset", pattern="*.csv", full.names = TRUE)
+ldf <- lapply(filenames, read.csv, fileEncoding="UTF-8-BOM", check.names = FALSE)
+names(ldf) <- str_replace(basename(filenames), ".csv", "")
+```
+```{r}
+# combine dataframes
+df <- rbindlist(ldf)
+df
+```
+```{r}
+# rename 18/19 columns
+names(df)[names(df) == "TAX CLASS AS OF FINAL ROLL 18/19"] <- "MOST RECENT TAX CLASS"
+names(df)[names(df) == "BUILDING CLASS AS OF FINAL ROLL 18/19"] <- "MOST RECENT BUILDING CLASS"
+```
+```{r}
+# get training and testing data
+
+# choose buroughs 1 and 2 for testing
+test_boroughs = df[df$BOROUGH == 1 | df$BOROUGH == 2, ]
+
+test_boroughs
+
+test_size <- floor(0.1 * nrow(test_boroughs))
+test_ind <- sample(seq_len(nrow(test_boroughs)), size = test_size)
+
+test_set <- test_boroughs[test_ind, ]
+train_set <- df[-test_ind, ]
+
+test_set
+train_set
+```
+
+
+
