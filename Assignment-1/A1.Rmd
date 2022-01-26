@@ -7,6 +7,8 @@ output: html_document
 
 # Part 1: Feature Selection and Multicollinearity Analysis
 
+## Initial Set Up
+
 ```{r}
 # imports
 require(ggplot2)
@@ -15,6 +17,8 @@ require(caret)
 require(plyr)
 require(data.table)
 require(dplyr)
+require(tidyr)
+require(tidyverse)
 ```
 ```{r}
 # alter plot size
@@ -24,35 +28,322 @@ knitr::opts_chunk$set(fig.width=20, fig.height=8)
 # import data
 filenames <- list.files("Assignment1-dataset", pattern="*.csv", full.names = TRUE)
 ldf <- lapply(filenames, read.csv, fileEncoding="UTF-8-BOM", check.names = FALSE)
-names(ldf) <- str_replace(basename(filenames), ".csv", "")
+names(ldf) <- str_replace_all(basename(filenames), ".csv", "")
+
 ```
 ```{r}
 # combine dataframes
 df <- rbindlist(ldf)
-df
 ```
 ```{r}
-# rename 18/19 columns
-names(df)[names(df) == "TAX CLASS AS OF FINAL ROLL 18/19"] <- "MOST RECENT TAX CLASS"
-names(df)[names(df) == "BUILDING CLASS AS OF FINAL ROLL 18/19"] <- "MOST RECENT BUILDING CLASS"
+# remove \n from column names
+colnames(df) <- str_replace_all(colnames(df), "\n", "")
+colnames(df) <- str_replace_all(colnames(df), " ", "_")
+colnames(df) <- tolower(colnames(df))
 ```
+```{r}
+colnames(df)
+```
+
+## Data Exploration
+
+To begin this assignment, I will explore the data in order to determine what cleaning needs to be done prior to analysis.
+
+```{r}
+# view data head
+head(df)
+```
+```{r}
+# statistical summary
+summary(df)
+```
+
+From looking at these summaries, it appears there are several issues which should be investigated further. Primarily:
+
+- column names
+- data types
+- missing values
+
+## Data Cleaning
+
+### Column Names
+
+Firstly, it should be noted that with the method of binding performed, I am combining the columns from 2018 and 2019 which end in "FINAL ROLL 18/19" and the columns from 2020 which end in "PRESENT". This assumption is being made as these columns (building class, tax class) are unlikely to change and can thus be stored under more generic column names.
+
+```{r}
+# change column names
+names(df)[names(df) == "tax_class_as_of_final_roll_18/19"] <- "tax_class"
+names(df)[names(df) == "building_class_as_of_final_roll_18/19"] <- "building_class"
+```
+
+### Data Types
+
+From looking at the summaries of the different columns, it appears certain columns are not storing their data in an optimal data type. Specifically, the following transformations should be made:
+
+- borough (integer -> character)
+- zip_code (integer -> character)
+- residential_units (character -> integer)
+- commercial_units (character -> integer)
+- total_units (character -> integer)
+- land_square_feet (character -> integer)
+- gross_square_feet (character -> integer)
+- tax_class_at_time_of_sale (integer -> character)
+- sale_price (character -> integer)
+- sale_date (character -> date)
+
+```{r}
+# remove unwanted characters
+df$residential_units <- str_replace_all(df$residential_units, ",", "")
+df$commercial_units <- str_replace_all(df$commercial_units, ",", "")
+df$total_units <- str_replace_all(df$total_units, ",", "")
+df$land_square_feet <- str_replace_all(df$land_square_feet, ",", "")
+df$gross_square_feet <- str_replace_all(df$gross_square_feet, ",", "")
+df$sale_price <- str_replace_all(df$sale_price, ",", "")
+df$sale_price <- str_replace_all(df$sale_price, "[$]", "")
+
+# change column data types
+df$borough <- character(df$borough)
+df$zip_code <- character(df$zip_code)
+df$residential_units <- as.integer(df$residential_units)
+df$commercial_units <- as.integer(df$commercial_units)
+df$total_units <- as.integer(df$total_units)
+df$land_square_feet <- as.integer(df$land_square_feet)
+df$gross_square_feet <- as.integer(df$gross_square_feet)
+df$tax_class_at_time_of_sale <- character(df$tax_class_at_time_of_sale)
+df$sale_price <- as.integer(df$sale_price)
+df$sale_date <- as.Date(df$sale_date)
+```
+
+### Missing Values
+
+```{r}
+# count missing values
+na_count <-sapply(df, function(x) sum(length(which(is.na(x)))))
+na_count <- data.frame(na_count)
+na_count
+```
+Looking at this information, a couple changes can be made right away.
+
+Firstly, rows with missing sale_price data should be removed as that information is critical to this analysis.
+
+Secondly, the ease-ment column is filled entirely with NA values which is not useful, so that column can be removed.
+
+```{r}
+# remove rows with missing sale_price data
+df <- df %>% drop_na(sale_price)
+
+# remove ease-ment column
+df <- select(df, -c("ease-ment"))
+```
+```{r}
+# count missing values
+na_count <-sapply(df, function(x) sum(length(which(is.na(x)))))
+na_count <- data.frame(na_count)
+na_count
+```
+
+Additionally, it can now be noted that only 17 rows are missing zip_code data. This is minimal and these rows can be removed.
+
+```{r}
+# remove rows with missing zip_code data
+df <- df %>% drop_na(zip_code)
+```
+
+Furthermore, it can be seen that several other columns have a significant number of missing values. These columns are:
+
+- residential_units			
+- commercial_units			
+- total_units			
+- land_square_feet			
+- gross_square_feet			
+- year_built			
+- tax_class_at_time_of_sale
+
+First I will investigate the unit columns. It can be noted that if 2/3 columns are filled the 3rd can be inferred.
+
+```{r}
+# if tot is empty replace with res + com
+df$total_units[is.na(df$total_units) & !is.na(df$residential_units) & !is.na(df$commercial_units)] <- df$residential_units[is.na(df$total_units) & !is.na(df$residential_units) & !is.na(df$commercial_units)] + df$commercial_units[is.na(df$total_units) & !is.na(df$residential_units) & !is.na(df$commercial_units)]
+
+# if res is empty replace with tot - com
+df$residential_units[is.na(df$residential_units) & !is.na(df$total_units) & !is.na(df$commercial_units)] <- df$total_units[is.na(df$residential_units) & !is.na(df$total_units) & !is.na(df$commercial_units)] - df$commercial_units[is.na(df$residential_units) & !is.na(df$total_units) & !is.na(df$commercial_units)]
+
+# if com is empty replace with tot - res
+df$commercial_units[is.na(df$commercial_units) & !is.na(df$total_units) & !is.na(df$residential_units)] <- df$total_units[is.na(df$commercial_units) & !is.na(df$total_units) & !is.na(df$residential_units)] - df$residential_units[is.na(df$commercial_units) & !is.na(df$total_units) & !is.na(df$residential_units)]
+```
+
+```{r}
+# count missing values
+na_count <-sapply(df, function(x) sum(length(which(is.na(x)))))
+na_count <- data.frame(na_count)
+na_count
+```
+
+There is still a significant amount of rows that are missing data in all 3 columns. Looking at the histograms of some of these columns for specific building classes shows that the number of units are typically the same across each specific building type. This is shown in a few histograms below. Therefore, to handle the missing values for these columns, I will replace the missing values with the rounded mean of it's building class.
+
+```{r}
+# create 1x4 figure
+par(mfrow=c(1,4))
+
+# residential unit histograms
+
+hist(df$residential_units[df$building_class == "A4"],
+     main = "Building Class: A4",
+     xlab = "Residential Units")
+hist(df$residential_units[df$building_class == "V0"],
+     main = "Building Class: V0",
+     xlab = "Residential Units")
+hist(df$residential_units[df$building_class == "B9"],
+     main = "Building Class: B9",
+     xlab = "Residential Units")
+hist(df$residential_units[df$building_class == "R3"],
+     main = "Building Class: R3",
+     xlab = "Residential Units")
+```
+```{r}
+# create 1x4 figure
+par(mfrow=c(1,4))
+
+# commercial unit histograms
+
+hist(df$commercial_units[df$building_class == "D1"],
+     main = "Building Class: D1",
+     xlab = "Commercial Units")
+hist(df$commercial_units[df$building_class == "I1"],
+     main = "Building Class: I1",
+     xlab = "Commercial Units")
+hist(df$commercial_units[df$building_class == "N9"],
+     main = "Building Class: N9",
+     xlab = "Commercial Units")
+hist(df$commercial_units[df$building_class == "Y3"],
+     main = "Building Class: Y3",
+     xlab = "Commercial Units")
+```
+```{r}
+# create mean function
+impute.mean <- function(x) replace(x, is.na(x), mean(x, na.rm = TRUE))
+
+# replace missing values with rounded mean
+df[, residential_units := round(impute.mean(residential_units)), by = building_class][,
+    commercial_units := round(impute.mean(commercial_units)), by = building_class]
+
+# if tot is empty replace with res + com
+df$total_units[is.na(df$total_units) & !is.na(df$residential_units) & !is.na(df$commercial_units)] <- df$residential_units[is.na(df$total_units) & !is.na(df$residential_units) & !is.na(df$commercial_units)] + df$commercial_units[is.na(df$total_units) & !is.na(df$residential_units) & !is.na(df$commercial_units)]
+```
+Furthermore, land_square_feet and gross_square_feet have many missing values. Looking at the histograms of some of these columns for specific building classes shows that the area does not have much variance across each specific building type. This is shown in a few histograms below. Therefore, to handle the missing values for these columns, I will replace the missing values with the rounded mean of it's building class.
+
+```{r}
+# create 1x4 figure
+par(mfrow=c(1,4))
+
+# land square feet histograms
+
+hist(df$land_square_feet[df$building_class == "RK"],
+     main = "Building Class: RK",
+     xlab = "Land Square Feet")
+hist(df$land_square_feet[df$building_class == "D0"],
+     main = "Building Class: D0",
+     xlab = "Land Square Feet")
+hist(df$land_square_feet[df$building_class == "W3"],
+     main = "Building Class: W3",
+     xlab = "Land Square Feet")
+hist(df$land_square_feet[df$building_class == "L1"],
+     main = "Building Class: L1",
+     xlab = "Land Square Feet")
+```
+```{r}
+# create 1x4 figure
+par(mfrow=c(1,4))
+
+# gross square feet histograms
+
+hist(df$gross_square_feet[df$building_class == "N1"],
+     main = "Building Class: N1",
+     xlab = "Gross Square Feet")
+hist(df$gross_square_feet[df$building_class == "Z2"],
+     main = "Building Class: Z2",
+     xlab = "Gross Square Feet")
+hist(df$gross_square_feet[df$building_class == "P7"],
+     main = "Building Class: B9",
+     xlab = "Gross Square Feet")
+hist(df$gross_square_feet[df$building_class == "A7"],
+     main = "Building Class: R3",
+     xlab = "Gross Square Feet")
+```
+```{r}
+# replace missing values with rounded mean
+df[, land_square_feet := round(impute.mean(land_square_feet)), by = building_class][,
+    gross_square_feet := round(impute.mean(gross_square_feet)), by = building_class]
+```
+
+```{r}
+# count missing values
+na_count <-sapply(df, function(x) sum(length(which(is.na(x)))))
+na_count <- data.frame(na_count)
+na_count
+```
+
+Some missing values remain in these columns where the building class is missing. These rows will be removed.
+
+```{r}
+# remove rows with missing building class data
+df <- df[!df$building_class == ""]
+```
+
+```{r}
+# count missing values
+na_count <-sapply(df, function(x) sum(length(which(is.na(x)))))
+na_count <- data.frame(na_count)
+na_count
+```
+
+Lastly, there is missing data in the year_built column. I will replace these values with the average value from their neighborhood.
+
+```{r}
+# replace missing values with rounded mean
+df[, year_built := round(impute.mean(year_built)), by = neighborhood]
+```
+
+```{r}
+# count missing values
+na_count <-sapply(df, function(x) sum(length(which(is.na(x)))))
+na_count <- data.frame(na_count)
+na_count
+```
+
+It appears one missing value is left. This row will be removed.
+
+```{r}
+# remove last row with missing value
+df <- na.omit(df)
+```
+
+Now that the data is clean, the assignment tasks can be executed.
+
+## RQ1.1
+
+### Train Test Split
+
+To begin, I will be using 10% of the data from boroughs 1 and 2 in 2020 to use as the testing dataset. The rest of the dataset will be used for training.
+
 ```{r}
 # get training and testing data
 
 # choose buroughs 1 and 2 for testing
-test_boroughs = df[df$BOROUGH == 1 | df$BOROUGH == 2, ]
-
-test_boroughs
+test_boroughs = df[df$borough == 1 | df$borough == 2, ]
 
 test_size <- floor(0.1 * nrow(test_boroughs))
 test_ind <- sample(seq_len(nrow(test_boroughs)), size = test_size)
 
 test_set <- test_boroughs[test_ind, ]
 train_set <- df[-test_ind, ]
-
-test_set
-train_set
 ```
 
+## RQ1.2
 
+### Feature Analysis
+
+```{r}
+
+```
 
