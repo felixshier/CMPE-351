@@ -19,306 +19,42 @@ require(data.table)
 require(dplyr)
 require(tidyr)
 require(tidyverse)
+require(mltools)
+require(lubridate)
+require(reshape2)
+require(e1071)
+require(Metrics)
 ```
+
 ```{r}
 # alter plot size
 knitr::opts_chunk$set(fig.width=20, fig.height=8) 
 ```
+
 ```{r}
 # import data
 filenames <- list.files("Assignment1-dataset", pattern="*.csv", full.names = TRUE)
 ldf <- lapply(filenames, read.csv, fileEncoding="UTF-8-BOM", check.names = FALSE)
 names(ldf) <- str_replace_all(basename(filenames), ".csv", "")
-
 ```
+
 ```{r}
 # combine dataframes
 df <- rbindlist(ldf)
 ```
+
 ```{r}
 # remove \n from column names
 colnames(df) <- str_replace_all(colnames(df), "\n", "")
 colnames(df) <- str_replace_all(colnames(df), " ", "_")
 colnames(df) <- tolower(colnames(df))
 ```
+
 ```{r}
 colnames(df)
 ```
 
-## Data Exploration
-
-To begin this assignment, I will explore the data in order to determine what cleaning needs to be done prior to analysis.
-
-```{r}
-# view data head
-head(df)
-```
-```{r}
-# statistical summary
-summary(df)
-```
-
-From looking at these summaries, it appears there are several issues which should be investigated further. Primarily:
-
-- column names
-- data types
-- missing values
-
-## Data Cleaning
-
-### Column Names
-
-Firstly, it should be noted that with the method of binding performed, I am combining the columns from 2018 and 2019 which end in "FINAL ROLL 18/19" and the columns from 2020 which end in "PRESENT". This assumption is being made as these columns (building class, tax class) are unlikely to change and can thus be stored under more generic column names.
-
-```{r}
-# change column names
-names(df)[names(df) == "tax_class_as_of_final_roll_18/19"] <- "tax_class"
-names(df)[names(df) == "building_class_as_of_final_roll_18/19"] <- "building_class"
-```
-
-### Data Types
-
-From looking at the summaries of the different columns, it appears certain columns are not storing their data in an optimal data type. Specifically, the following transformations should be made:
-
-- borough (integer -> character)
-- zip_code (integer -> character)
-- residential_units (character -> integer)
-- commercial_units (character -> integer)
-- total_units (character -> integer)
-- land_square_feet (character -> integer)
-- gross_square_feet (character -> integer)
-- tax_class_at_time_of_sale (integer -> character)
-- sale_price (character -> integer)
-- sale_date (character -> date)
-
-```{r}
-# remove unwanted characters
-df$residential_units <- str_replace_all(df$residential_units, ",", "")
-df$commercial_units <- str_replace_all(df$commercial_units, ",", "")
-df$total_units <- str_replace_all(df$total_units, ",", "")
-df$land_square_feet <- str_replace_all(df$land_square_feet, ",", "")
-df$gross_square_feet <- str_replace_all(df$gross_square_feet, ",", "")
-df$sale_price <- str_replace_all(df$sale_price, ",", "")
-df$sale_price <- str_replace_all(df$sale_price, "[$]", "")
-
-# change column data types
-df$borough <- character(df$borough)
-df$zip_code <- character(df$zip_code)
-df$residential_units <- as.integer(df$residential_units)
-df$commercial_units <- as.integer(df$commercial_units)
-df$total_units <- as.integer(df$total_units)
-df$land_square_feet <- as.integer(df$land_square_feet)
-df$gross_square_feet <- as.integer(df$gross_square_feet)
-df$tax_class_at_time_of_sale <- character(df$tax_class_at_time_of_sale)
-df$sale_price <- as.integer(df$sale_price)
-df$sale_date <- as.Date(df$sale_date)
-```
-
-### Missing Values
-
-```{r}
-# count missing values
-na_count <-sapply(df, function(x) sum(length(which(is.na(x)))))
-na_count <- data.frame(na_count)
-na_count
-```
-Looking at this information, a couple changes can be made right away.
-
-Firstly, rows with missing sale_price data should be removed as that information is critical to this analysis.
-
-Secondly, the ease-ment column is filled entirely with NA values which is not useful, so that column can be removed.
-
-```{r}
-# remove rows with missing sale_price data
-df <- df %>% drop_na(sale_price)
-
-# remove ease-ment column
-df <- select(df, -c("ease-ment"))
-```
-```{r}
-# count missing values
-na_count <-sapply(df, function(x) sum(length(which(is.na(x)))))
-na_count <- data.frame(na_count)
-na_count
-```
-
-Additionally, it can now be noted that only 17 rows are missing zip_code data. This is minimal and these rows can be removed.
-
-```{r}
-# remove rows with missing zip_code data
-df <- df %>% drop_na(zip_code)
-```
-
-Furthermore, it can be seen that several other columns have a significant number of missing values. These columns are:
-
-- residential_units			
-- commercial_units			
-- total_units			
-- land_square_feet			
-- gross_square_feet			
-- year_built			
-- tax_class_at_time_of_sale
-
-First I will investigate the unit columns. It can be noted that if 2/3 columns are filled the 3rd can be inferred.
-
-```{r}
-# if tot is empty replace with res + com
-df$total_units[is.na(df$total_units) & !is.na(df$residential_units) & !is.na(df$commercial_units)] <- df$residential_units[is.na(df$total_units) & !is.na(df$residential_units) & !is.na(df$commercial_units)] + df$commercial_units[is.na(df$total_units) & !is.na(df$residential_units) & !is.na(df$commercial_units)]
-
-# if res is empty replace with tot - com
-df$residential_units[is.na(df$residential_units) & !is.na(df$total_units) & !is.na(df$commercial_units)] <- df$total_units[is.na(df$residential_units) & !is.na(df$total_units) & !is.na(df$commercial_units)] - df$commercial_units[is.na(df$residential_units) & !is.na(df$total_units) & !is.na(df$commercial_units)]
-
-# if com is empty replace with tot - res
-df$commercial_units[is.na(df$commercial_units) & !is.na(df$total_units) & !is.na(df$residential_units)] <- df$total_units[is.na(df$commercial_units) & !is.na(df$total_units) & !is.na(df$residential_units)] - df$residential_units[is.na(df$commercial_units) & !is.na(df$total_units) & !is.na(df$residential_units)]
-```
-
-```{r}
-# count missing values
-na_count <-sapply(df, function(x) sum(length(which(is.na(x)))))
-na_count <- data.frame(na_count)
-na_count
-```
-
-There is still a significant amount of rows that are missing data in all 3 columns. Looking at the histograms of some of these columns for specific building classes shows that the number of units are typically the same across each specific building type. This is shown in a few histograms below. Therefore, to handle the missing values for these columns, I will replace the missing values with the rounded mean of it's building class.
-
-```{r}
-# create 1x4 figure
-par(mfrow=c(1,4))
-
-# residential unit histograms
-
-hist(df$residential_units[df$building_class == "A4"],
-     main = "Building Class: A4",
-     xlab = "Residential Units")
-hist(df$residential_units[df$building_class == "V0"],
-     main = "Building Class: V0",
-     xlab = "Residential Units")
-hist(df$residential_units[df$building_class == "B9"],
-     main = "Building Class: B9",
-     xlab = "Residential Units")
-hist(df$residential_units[df$building_class == "R3"],
-     main = "Building Class: R3",
-     xlab = "Residential Units")
-```
-```{r}
-# create 1x4 figure
-par(mfrow=c(1,4))
-
-# commercial unit histograms
-
-hist(df$commercial_units[df$building_class == "D1"],
-     main = "Building Class: D1",
-     xlab = "Commercial Units")
-hist(df$commercial_units[df$building_class == "I1"],
-     main = "Building Class: I1",
-     xlab = "Commercial Units")
-hist(df$commercial_units[df$building_class == "N9"],
-     main = "Building Class: N9",
-     xlab = "Commercial Units")
-hist(df$commercial_units[df$building_class == "Y3"],
-     main = "Building Class: Y3",
-     xlab = "Commercial Units")
-```
-```{r}
-# create mean function
-impute.mean <- function(x) replace(x, is.na(x), mean(x, na.rm = TRUE))
-
-# replace missing values with rounded mean
-df[, residential_units := round(impute.mean(residential_units)), by = building_class][,
-    commercial_units := round(impute.mean(commercial_units)), by = building_class]
-
-# if tot is empty replace with res + com
-df$total_units[is.na(df$total_units) & !is.na(df$residential_units) & !is.na(df$commercial_units)] <- df$residential_units[is.na(df$total_units) & !is.na(df$residential_units) & !is.na(df$commercial_units)] + df$commercial_units[is.na(df$total_units) & !is.na(df$residential_units) & !is.na(df$commercial_units)]
-```
-Furthermore, land_square_feet and gross_square_feet have many missing values. Looking at the histograms of some of these columns for specific building classes shows that the area does not have much variance across each specific building type. This is shown in a few histograms below. Therefore, to handle the missing values for these columns, I will replace the missing values with the rounded mean of it's building class.
-
-```{r}
-# create 1x4 figure
-par(mfrow=c(1,4))
-
-# land square feet histograms
-
-hist(df$land_square_feet[df$building_class == "RK"],
-     main = "Building Class: RK",
-     xlab = "Land Square Feet")
-hist(df$land_square_feet[df$building_class == "D0"],
-     main = "Building Class: D0",
-     xlab = "Land Square Feet")
-hist(df$land_square_feet[df$building_class == "W3"],
-     main = "Building Class: W3",
-     xlab = "Land Square Feet")
-hist(df$land_square_feet[df$building_class == "L1"],
-     main = "Building Class: L1",
-     xlab = "Land Square Feet")
-```
-```{r}
-# create 1x4 figure
-par(mfrow=c(1,4))
-
-# gross square feet histograms
-
-hist(df$gross_square_feet[df$building_class == "N1"],
-     main = "Building Class: N1",
-     xlab = "Gross Square Feet")
-hist(df$gross_square_feet[df$building_class == "Z2"],
-     main = "Building Class: Z2",
-     xlab = "Gross Square Feet")
-hist(df$gross_square_feet[df$building_class == "P7"],
-     main = "Building Class: B9",
-     xlab = "Gross Square Feet")
-hist(df$gross_square_feet[df$building_class == "A7"],
-     main = "Building Class: R3",
-     xlab = "Gross Square Feet")
-```
-```{r}
-# replace missing values with rounded mean
-df[, land_square_feet := round(impute.mean(land_square_feet)), by = building_class][,
-    gross_square_feet := round(impute.mean(gross_square_feet)), by = building_class]
-```
-
-```{r}
-# count missing values
-na_count <-sapply(df, function(x) sum(length(which(is.na(x)))))
-na_count <- data.frame(na_count)
-na_count
-```
-
-Some missing values remain in these columns where the building class is missing. These rows will be removed.
-
-```{r}
-# remove rows with missing building class data
-df <- df[!df$building_class == ""]
-```
-
-```{r}
-# count missing values
-na_count <-sapply(df, function(x) sum(length(which(is.na(x)))))
-na_count <- data.frame(na_count)
-na_count
-```
-
-Lastly, there is missing data in the year_built column. I will replace these values with the average value from their neighborhood.
-
-```{r}
-# replace missing values with rounded mean
-df[, year_built := round(impute.mean(year_built)), by = neighborhood]
-```
-
-```{r}
-# count missing values
-na_count <-sapply(df, function(x) sum(length(which(is.na(x)))))
-na_count <- data.frame(na_count)
-na_count
-```
-
-It appears one missing value is left. This row will be removed.
-
-```{r}
-# remove last row with missing value
-df <- na.omit(df)
-```
-
-Now that the data is clean, the assignment tasks can be executed.
+Now that the data is in a useable format, the assignment tasks can be completed
 
 ## RQ1.1
 
@@ -341,9 +77,796 @@ train_set <- df[-test_ind, ]
 
 ## RQ1.2
 
-### Feature Analysis
+### Target Variable Analysis
+
+To begin data exploration, I will explore the target variable which we are trying to predict: sale_price.
 
 ```{r}
-
+# summarize sale prices
+summary(train_set$sale_price)
 ```
+It appears this column needs some cleaning prior to analysis.
+
+```{r}
+# remove unwanted characters
+train_set$sale_price <- str_replace_all(train_set$sale_price, ",", "")
+train_set$sale_price <- str_replace_all(train_set$sale_price, "[$]", "")
+
+# change data type to integer
+train_set$sale_price <- as.integer(train_set$sale_price)
+```
+
+Now the column can be investigated.
+
+```{r}
+# summarize sale prices
+summary(train_set$sale_price)
+```
+
+Firstly, there seems to be quite a few NA values in this column which are not useful for this project, hence, these can be removed.
+
+```{r}
+# remove rows with missing sale_price data
+train_set <- train_set %>% drop_na(sale_price)
+```
+
+Secondly, there are a lot of $0 sales prices which indicates a transfer of ownership as stated in the glossary. As I am interested only in predicting positive non-zero house prices, I will remove the zero valued house prices.
+
+```{r}
+# remove $0 houses (ownership transfers)
+train_set <- train_set[!train_set$sale_price == 0]
+```
+
+Now let's see what we're working with.
+
+```{r}
+# summarize sale prices
+summary(train_set$sale_price)
+```
+```{r}
+# sale price histogram
+hist(train_set$sale_price)
+```
+
+```{r}
+# calculate skewness
+skewness(train_set$sale_price)
+```
+That's better, however, it's a bit skewed. Perhaps the log normal sale price will look better.
+
+```{r}
+# log normal sale price
+train_set$log_sale_price <- log(train_set$sale_price)
+```
+
+```{r}
+# histogram of log normal sale price
+hist(train_set$log_sale_price)
+```
+```{r}
+# calculate skewness
+skewness(train_set$log_sale_price)
+```
+```{r}
+qqnorm(train_set$log_sale_price)
+qqline(train_set$log_sale_price)
+```
+We will continue using the log sale price, so the sale price can be removed.
+
+```{r}
+# remove sale price
+train_set <- select(train_set, -c("sale_price"))
+```
+
+### Data Exploration
+
+Next, I will explore the data in order to determine which features can contribute to house price prediction.
+
+```{r}
+# view data head
+head(train_set)
+```
+
+```{r}
+# statistical summary
+summary(train_set)
+```
+
+From looking at these summaries, it appears there are several issues which should be investigated further. Primarily:
+
+- column names
+- data types
+- missing values
+
+### Data Cleaning
+
+#### Column Names
+
+Firstly, it should be noted that with the method of binding performed, I am combining the columns from 2018 and 2019 which end in "FINAL ROLL 18/19" and the columns from 2020 which end in "PRESENT". This assumption is being made as these columns (building class, tax class) are unlikely to change and can thus be stored under more generic column names.
+
+```{r}
+# change column names
+names(train_set)[names(train_set) == "tax_class_as_of_final_roll_18/19"] <- "tax_class"
+names(train_set)[names(train_set) == "building_class_as_of_final_roll_18/19"] <- "building_class"
+```
+
+#### Data Types
+
+From looking at the summaries of the different columns, it appears certain columns are not storing their data in an optimal data type. Specifically, the following transformations should be made:
+
+- residential_units (character -> integer)
+- commercial_units (character -> integer)
+- total_units (character -> integer)
+- land_square_feet (character -> integer)
+- gross_square_feet (character -> integer)
+- sale_date (character -> date)
+
+```{r}
+# remove unwanted characters
+train_set$residential_units <- str_replace_all(train_set$residential_units, ",", "")
+train_set$commercial_units <- str_replace_all(train_set$commercial_units, ",", "")
+train_set$total_units <- str_replace_all(train_set$total_units, ",", "")
+train_set$land_square_feet <- str_replace_all(train_set$land_square_feet, ",", "")
+train_set$gross_square_feet <- str_replace_all(train_set$gross_square_feet, ",", "")
+
+# change column data types
+train_set$residential_units <- as.integer(train_set$residential_units)
+train_set$commercial_units <- as.integer(train_set$commercial_units)
+train_set$total_units <- as.integer(train_set$total_units)
+train_set$land_square_feet <- as.integer(train_set$land_square_feet)
+train_set$gross_square_feet <- as.integer(train_set$gross_square_feet)
+train_set$sale_date <- as.Date(train_set$sale_date)
+```
+
+#### Missing Values
+
+```{r}
+# count missing values
+na_count <-sapply(train_set, function(x) sum(length(which(is.na(x)))))
+na_count <- data.frame(na_count)
+na_count
+```
+
+The ease-ment column is filled entirely with NA values which is not useful, so that column can be removed.
+
+```{r}
+# remove ease-ment column
+train_set <- select(train_set, -c("ease-ment"))
+```
+
+```{r}
+# count missing values
+na_count <-sapply(train_set, function(x) sum(length(which(is.na(x)))))
+na_count <- data.frame(na_count)
+na_count
+```
+
+Additionally, it can now be noted that only a few rows are missing zip_code data. This is minimal and these rows can be removed.
+
+```{r}
+# remove rows with missing zip_code data
+train_set <- train_set %>% drop_na(zip_code)
+```
+
+Furthermore, it can be seen that several other columns have a significant number of missing values. These columns are:
+
+- residential_units			
+- commercial_units			
+- total_units			
+- land_square_feet			
+- gross_square_feet			
+- year_built			
+- tax_class_at_time_of_sale
+
+First I will investigate the unit columns. It can be noted that if 2/3 columns are filled the 3rd can be inferred.
+
+```{r}
+# if tot is empty replace with res + com
+train_set$total_units[is.na(train_set$total_units) & !is.na(train_set$residential_units) & !is.na(train_set$commercial_units)] <- train_set$residential_units[is.na(train_set$total_units) & !is.na(train_set$residential_units) & !is.na(train_set$commercial_units)] + train_set$commercial_units[is.na(train_set$total_units) & !is.na(train_set$residential_units) & !is.na(train_set$commercial_units)]
+
+# if res is empty replace with tot - com
+train_set$residential_units[is.na(train_set$residential_units) & !is.na(train_set$total_units) & !is.na(train_set$commercial_units)] <- train_set$total_units[is.na(train_set$residential_units) & !is.na(train_set$total_units) & !is.na(train_set$commercial_units)] - train_set$commercial_units[is.na(train_set$residential_units) & !is.na(train_set$total_units) & !is.na(train_set$commercial_units)]
+
+# if com is empty replace with tot - res
+train_set$commercial_units[is.na(train_set$commercial_units) & !is.na(train_set$total_units) & !is.na(train_set$residential_units)] <- train_set$total_units[is.na(train_set$commercial_units) & !is.na(train_set$total_units) & !is.na(train_set$residential_units)] - train_set$residential_units[is.na(train_set$commercial_units) & !is.na(train_set$total_units) & !is.na(train_set$residential_units)]
+```
+
+```{r}
+# count missing values
+na_count <-sapply(train_set, function(x) sum(length(which(is.na(x)))))
+na_count <- data.frame(na_count)
+na_count
+```
+
+There is still a significant amount of rows that are missing data in all 3 columns. Looking at the histograms of some of these columns for specific building classes shows that the number of units are typically the same across each specific building type. This is shown in a few histograms below. Therefore, to handle the missing values for these columns, I will replace the missing values with the rounded mean of it's building class.
+
+```{r}
+# create 1x4 figure
+par(mfrow=c(1,4))
+
+# residential unit histograms
+hist(train_set$residential_units[train_set$building_class == "A4"],
+     main = "Building Class: A4",
+     xlab = "Residential Units")
+hist(train_set$residential_units[train_set$building_class == "V0"],
+     main = "Building Class: V0",
+     xlab = "Residential Units")
+hist(train_set$residential_units[train_set$building_class == "B9"],
+     main = "Building Class: B9",
+     xlab = "Residential Units")
+hist(train_set$residential_units[train_set$building_class == "R3"],
+     main = "Building Class: R3",
+     xlab = "Residential Units")
+```
+
+```{r}
+# create 1x4 figure
+par(mfrow=c(1,4))
+
+# commercial unit histograms
+hist(train_set$commercial_units[train_set$building_class == "D1"],
+     main = "Building Class: D1",
+     xlab = "Commercial Units")
+hist(train_set$commercial_units[train_set$building_class == "I1"],
+     main = "Building Class: I1",
+     xlab = "Commercial Units")
+hist(train_set$commercial_units[train_set$building_class == "N9"],
+     main = "Building Class: N9",
+     xlab = "Commercial Units")
+hist(train_set$commercial_units[train_set$building_class == "Y3"],
+     main = "Building Class: Y3",
+     xlab = "Commercial Units")
+```
+
+```{r}
+# create mean function
+impute.mean <- function(x) replace(x, is.na(x), mean(x, na.rm = TRUE))
+
+# replace missing values with rounded mean
+train_set[, residential_units := round(impute.mean(residential_units)), by = building_class][,
+    commercial_units := round(impute.mean(commercial_units)), by = building_class]
+
+# if tot is empty replace with res + com
+train_set$total_units[is.na(train_set$total_units) & !is.na(train_set$residential_units) & !is.na(train_set$commercial_units)] <- train_set$residential_units[is.na(train_set$total_units) & !is.na(train_set$residential_units) & !is.na(train_set$commercial_units)] + train_set$commercial_units[is.na(train_set$total_units) & !is.na(train_set$residential_units) & !is.na(train_set$commercial_units)]
+```
+
+Furthermore, land_square_feet and gross_square_feet have many missing values. Looking at the histograms of some of these columns for specific building classes shows that the area does not have much variance across each specific building type. This is shown in a few histograms below. Therefore, to handle the missing values for these columns, I will replace the missing values with the rounded mean of it's building class.
+
+```{r}
+# create 1x4 figure
+par(mfrow=c(1,4))
+
+# land square feet histograms
+
+hist(train_set$land_square_feet[train_set$building_class == "RK"],
+     main = "Building Class: RK",
+     xlab = "Land Square Feet")
+hist(train_set$land_square_feet[train_set$building_class == "D0"],
+     main = "Building Class: D0",
+     xlab = "Land Square Feet")
+hist(train_set$land_square_feet[train_set$building_class == "W3"],
+     main = "Building Class: W3",
+     xlab = "Land Square Feet")
+hist(train_set$land_square_feet[train_set$building_class == "L1"],
+     main = "Building Class: L1",
+     xlab = "Land Square Feet")
+```
+
+```{r}
+# create 1x4 figure
+par(mfrow=c(1,4))
+
+# gross square feet histograms
+
+hist(train_set$gross_square_feet[train_set$building_class == "N1"],
+     main = "Building Class: N1",
+     xlab = "Gross Square Feet")
+hist(train_set$gross_square_feet[train_set$building_class == "Z2"],
+     main = "Building Class: Z2",
+     xlab = "Gross Square Feet")
+hist(train_set$gross_square_feet[train_set$building_class == "P7"],
+     main = "Building Class: B9",
+     xlab = "Gross Square Feet")
+hist(train_set$gross_square_feet[train_set$building_class == "A7"],
+     main = "Building Class: R3",
+     xlab = "Gross Square Feet")
+```
+
+```{r}
+# replace missing values with rounded mean
+train_set[, land_square_feet := round(impute.mean(land_square_feet)), by = building_class][,
+    gross_square_feet := round(impute.mean(gross_square_feet)), by = building_class]
+```
+
+```{r}
+# count missing values
+na_count <-sapply(train_set, function(x) sum(length(which(is.na(x)))))
+na_count <- data.frame(na_count)
+na_count
+```
+
+Some missing values remain in these columns where the building class is missing. These rows will be removed.
+
+```{r}
+# remove rows with missing building class data
+train_set <- train_set[!train_set$building_class == ""]
+```
+
+```{r}
+# count missing values
+na_count <-sapply(train_set, function(x) sum(length(which(is.na(x)))))
+na_count <- data.frame(na_count)
+na_count
+```
+
+Lastly, there is missing data in the year_built column. I will replace these values with the average value from their neighborhood.
+
+```{r}
+# replace missing values with rounded mean
+train_set[, year_built := round(impute.mean(year_built)), by = neighborhood]
+```
+
+```{r}
+# count missing values
+na_count <-sapply(train_set, function(x) sum(length(which(is.na(x)))))
+na_count <- data.frame(na_count)
+na_count
+```
+
+It appears one missing value is left. This row will be removed.
+
+```{r}
+# remove last row with missing value
+train_set <- na.omit(train_set)
+```
+
+Now that the data is clean it is time to transform certain columns.
+
+### Data Transformation
+
+#### Column Removal
+
+To begin data transformation, I will remove investigate certain columns which I do not believe will be useful during analysis. Specifically, I will investigate:
+
+- block
+- lot
+- apartment_number
+- address
+
+```{r}
+# plot selected columns vs sale price
+
+plot(train_set$block, train_set$log_sale_price)
+
+plot(train_set$lot, train_set$log_sale_price)
+
+plot(train_set$apartment_number, train_set$log_sale_price)
+```
+
+In each of the plots above, it does not seem like there is too much correlation between the column of choice and the sale price. For this reason, I will remove the columns from the dataset. Furthermore, the address column is difficult to interpret and will be removed.
+
+```{r}
+# remove selected columns
+train_set <- select(train_set, -c("block", "lot", "apartment_number", "address"))
+```
+
+Additionally, from the glossary, it appears that the columns building_class_category, building_class, and building_class_at_time_of_sale should all contain the same information. Additionally, tax_class and tax_class_at_time_of_sale should contain the same information. Hence, only one column from each group should be retained. For simplicity, building_class and tax_class will be retained.
+
+```{r}
+# remove selected columns
+train_set <- select(train_set, -c("building_class_category", "building_class_at_time_of_sale", "tax_class_at_time_of_sale"))
+```
+
+Furthermore, total_units does not provide any new information as it is simply the sum of residential_units and commercial_units. Hence, it can be removed.
+
+```{r}
+# remove selected columns
+train_set <- select(train_set, -c("total_units"))
+```
+
+Lastly, in a future question, a collinearity analysis is performed which determined that neighborhoods and zip codes were strongly correlated and thus only one should be kept. I will remove the zip_code column for this reason.
+
+```{r}
+# remove selected columns
+train_set <- select(train_set, -c("zip_code"))
+```
+
+This leaves us with the following columns:
+
+Categorical Columns:
+
+- borough
+- neighborhood
+- tax_class
+- building_class
+
+Numerical Variables:
+
+- residential_units
+- commercial_units
+- land_square_feet
+- gross_square_feet
+- year_built
+
+I will go through these one by one in order to determine if they will be useful during analysis.
+
+Categorical Columns:
+
+- borough
+
+```{r}
+# boxplot of data by sale price grouped by borough
+boxplot(log_sale_price ~ borough, data = train_set)
+```
+It can be see that the distributions of each borough is different, hence, I will keep borough as a feature in the dataset. However, it should be one-hot encoded (later).
+
+- neighborhood
+
+```{r}
+# most common neighborhoods in the data by sale price
+common_neighborhoods <- sort(table(train_set$neighborhood),decreasing=TRUE)[1:10]
+
+# boxplot most common neighborhoods
+boxplot(log_sale_price ~ neighborhood, data = train_set[train_set$neighborhood %in% names(common_neighborhoods)])
+```
+It can be see that the distributions of each of the most common neighborhoods is different, hence, I will keep neighborhood as a feature in the dataset. However, it should be one-hot encoded (later).
+
+- tax_class
+
+```{r}
+# most common tax classes in the data by sale price
+common_tax_classes <- sort(table(train_set$tax_class),decreasing=TRUE)[1:10]
+
+# boxplot most common tax classes
+boxplot(log_sale_price ~ tax_class, data = train_set[train_set$tax_class %in% names(common_tax_classes)])
+```
+It can be see that the distributions of each of the most common tax classes is different, hence, I will keep tax_class as a feature in the dataset. However, it should be one-hot encoded (later).
+
+- building_class
+
+```{r}
+# most common building classes in the data by sale price
+common_building_classes <- sort(table(train_set$building_class),decreasing=TRUE)[1:10]
+
+# boxplot most common building classes
+boxplot(log_sale_price ~ building_class, data = train_set[train_set$building_class %in% names(common_building_classes)])
+```
+It can be see that the distributions of each of the most common building classes is different, hence, I will keep building_class as a feature in the dataset. However, it should be one-hot encoded (later).
+
+Numerical Variables:
+
+- residential_units
+
+```{r}
+# most common number of residential units in the data by sale price
+common_res_units <- sort(table(train_set$residential_units),decreasing=TRUE)[1:10]
+
+# boxplot most common number of residential units classes
+boxplot(log_sale_price ~ residential_units, data = train_set[train_set$residential_units %in% names(common_res_units)])
+```
+In the the the training data there is clearly a positive correlation between the number of residential units and the sale price, hence, I will keep residential_units as a feature in the dataset.
+
+- commercial_units
+
+```{r}
+# most common number of commercial units in the data by sale price
+common_com_units <- sort(table(train_set$commercial_units),decreasing=TRUE)[1:10]
+
+# boxplot most common number of commercial units 
+boxplot(log_sale_price ~ commercial_units, data = train_set[train_set$commercial_units %in% names(common_com_units)])
+```
+
+In the the the training data there is clearly a positive correlation between the number of commercial units and the sale price, hence, I will keep commercial_units as a feature in the dataset.
+
+- land_square_feet
+
+```{r}
+# most common land square footage in the data by sale price
+common_land_sqft <- sort(table(train_set$land_square_feet),decreasing=TRUE)[1:10]
+
+# boxplot most common land square footage
+boxplot(log_sale_price ~ land_square_feet, data = train_set[train_set$land_square_feet %in% names(common_land_sqft)])
+```
+
+In the the the training data there does not seem to be a relationship between the land square footage and the sale price, hence, I will remove land_square_feet as a feature in the dataset.
+
+```{r}
+# remove selected columns
+train_set <- select(train_set, -c("land_square_feet"))
+```
+
+
+- gross_square_feet
+
+```{r}
+# most common gross square footage in the data by sale price
+common_gross_sqft <- sort(table(train_set$gross_square_feet),decreasing=TRUE)[1:10]
+
+# boxplot most common gross square footage 
+boxplot(log_sale_price ~ gross_square_feet, data = train_set[train_set$gross_square_feet %in% names(common_gross_sqft)])
+```
+
+In the the the training data there is clearly a positive correlation between the gross square footage and the sale price, hence, I will keep gross_square_feet as a feature in the dataset.
+
+- year_built
+
+```{r}
+# most common build year in the data by sale price
+common_year <- sort(table(train_set$year_built),decreasing=TRUE)[1:30]
+
+# boxplot most common build year
+boxplot(log_sale_price ~ year_built, data = train_set[train_set$year_built %in% names(common_year)])
+```
+
+In the the the training data there is clearly a  relationship between the build year and the sale price, hence, I will keep year_built as a feature in the dataset.
+
+#### Splitting Columns
+
+Next, I will extract the year and month from the sale_date column.
+
+```{r}
+# create sale_year and sale_month column
+train_set %>%
+  mutate(sale_year = year(sale_date),
+         sale_month = month(sale_date))
+
+# remove original column
+train_set <- select(train_set, -c("sale_date"))
+```
+
+#### One Hot Encoding
+
+Now I will perform one-hot encoding on the categorical features such that they can be better interpreted during analysis. The following columns will be one-hot encoded:
+
+- borough
+- neighborhood
+- building_class
+- tax_class
+
+```{r}
+# one hot encode borough
+train_set$borough <- as.character(train_set$borough)
+dmy <- dummyVars(" ~ borough", data = train_set)
+ohe_borough <- data.frame(predict(dmy, newdata = train_set))
+
+# one hot encode neighborhood
+train_set$neighborhood <- as.character(train_set$neighborhood)
+dmy <- dummyVars(" ~ neighborhood", data = train_set)
+ohe_neighborhood <- data.frame(predict(dmy, newdata = train_set))
+
+# one hot encode building_class
+train_set$building_class <- as.character(train_set$building_class)
+dmy <- dummyVars(" ~ building_class", data = train_set)
+ohe_building_class <- data.frame(predict(dmy, newdata = train_set))
+
+# one hot encode tax_class
+train_set$tax_class <- as.character(train_set$tax_class)
+dmy <- dummyVars(" ~ tax_class", data = train_set)
+ohe_tax_class <- data.frame(predict(dmy, newdata = train_set))
+
+# remove original columns from dataset
+train_set <- select(train_set, -c("borough", "neighborhood", "building_class", "tax_class"))
+
+# add one hot encoded columns
+train_set <- cbind(train_set, ohe_borough, ohe_neighborhood, ohe_building_class, ohe_tax_class)
+```
+
+## RQ1.3
+
+```{r}
+# correlation matrix
+res <- cor(train_set)
+correlation_matrix <- round(res,2)
+correlation_matrix <- data.frame(correlation_matrix)
+
+correlation_matrix[rowSums(correlation_matrix >= 0.8 & correlation_matrix < 1) != 0, , drop = FALSE]
+```
+Although it cannot be seen here now, a correlation study was performed while the one hot encoded zip codes were included in the dataset. This study showed a high correlation between the zip codes and the neighborhoods. For this reason, the zip_code feature was removed from the dataset.
+
+Currently, it can be seen that there is correlation between a few of the one hot encoded features; however, do to the number of features that exist, leaving these features in the dataset should not hinder model performance.
+
+## RQ1.4
+
+Features used:
+
+- residential_units
+- commercial_units
+- gross_square_feet
+- year_built
+- borough (one hot encoded)
+- neighborhood (one hot encoded)
+- building_class (one hot encoded)
+- tax class (one hot encoded)
+
+# Part 2: Prediction using Regression Models
+
+## Test Set Cleaning
+
+before building the model I will perform all cleaning/engineering that was done to the training set. This shall all be done in the code block below.
+
+```{r}
+# remove unwanted characters
+test_set$sale_price <- str_replace_all(test_set$sale_price, ",", "")
+test_set$sale_price <- str_replace_all(test_set$sale_price, "[$]", "")
+
+# change data type to integer
+test_set$sale_price <- as.integer(test_set$sale_price)
+
+# remove rows with missing sale_price data
+test_set <- test_set %>% drop_na(sale_price)
+
+# remove $0 houses (ownership transfers)
+test_set <- test_set[!test_set$sale_price == 0]
+
+# log normal sale price
+test_set$log_sale_price <- log(test_set$sale_price)
+
+# remove sale price
+test_set <- select(test_set, -c("sale_price"))
+
+# change column names
+names(test_set)[names(test_set) == "tax_class_as_of_final_roll_18/19"] <- "tax_class"
+names(test_set)[names(test_set) == "building_class_as_of_final_roll_18/19"] <- "building_class"
+
+# remove unwanted characters
+test_set$residential_units <- str_replace_all(test_set$residential_units, ",", "")
+test_set$commercial_units <- str_replace_all(test_set$commercial_units, ",", "")
+test_set$total_units <- str_replace_all(test_set$total_units, ",", "")
+test_set$land_square_feet <- str_replace_all(test_set$land_square_feet, ",", "")
+test_set$gross_square_feet <- str_replace_all(test_set$gross_square_feet, ",", "")
+
+# change column data types
+test_set$residential_units <- as.integer(test_set$residential_units)
+test_set$commercial_units <- as.integer(test_set$commercial_units)
+test_set$total_units <- as.integer(test_set$total_units)
+test_set$land_square_feet <- as.integer(test_set$land_square_feet)
+test_set$gross_square_feet <- as.integer(test_set$gross_square_feet)
+test_set$sale_date <- as.Date(test_set$sale_date)
+
+# remove ease-ment column
+test_set <- select(test_set, -c("ease-ment"))
+
+# remove rows with missing zip_code data
+test_set <- test_set %>% drop_na(zip_code)
+
+# if tot is empty replace with res + com
+test_set$total_units[is.na(test_set$total_units) & !is.na(test_set$residential_units) & !is.na(test_set$commercial_units)] <- test_set$residential_units[is.na(test_set$total_units) & !is.na(test_set$residential_units) & !is.na(test_set$commercial_units)] + test_set$commercial_units[is.na(test_set$total_units) & !is.na(test_set$residential_units) & !is.na(test_set$commercial_units)]
+
+# if res is empty replace with tot - com
+test_set$residential_units[is.na(test_set$residential_units) & !is.na(test_set$total_units) & !is.na(test_set$commercial_units)] <- test_set$total_units[is.na(test_set$residential_units) & !is.na(test_set$total_units) & !is.na(test_set$commercial_units)] - test_set$commercial_units[is.na(test_set$residential_units) & !is.na(test_set$total_units) & !is.na(test_set$commercial_units)]
+
+# if com is empty replace with tot - res
+test_set$commercial_units[is.na(test_set$commercial_units) & !is.na(test_set$total_units) & !is.na(test_set$residential_units)] <- test_set$total_units[is.na(test_set$commercial_units) & !is.na(test_set$total_units) & !is.na(test_set$residential_units)] - test_set$residential_units[is.na(test_set$commercial_units) & !is.na(test_set$total_units) & !is.na(test_set$residential_units)]
+
+# create mean function
+impute.mean <- function(x) replace(x, is.na(x), mean(x, na.rm = TRUE))
+
+# replace missing values with rounded mean
+test_set[, residential_units := round(impute.mean(residential_units)), by = building_class][,
+    commercial_units := round(impute.mean(commercial_units)), by = building_class]
+
+# if tot is empty replace with res + com
+test_set$total_units[is.na(test_set$total_units) & !is.na(test_set$residential_units) & !is.na(test_set$commercial_units)] <- test_set$residential_units[is.na(test_set$total_units) & !is.na(test_set$residential_units) & !is.na(test_set$commercial_units)] + test_set$commercial_units[is.na(test_set$total_units) & !is.na(test_set$residential_units) & !is.na(test_set$commercial_units)]
+
+# replace missing values with rounded mean
+test_set[, land_square_feet := round(impute.mean(land_square_feet)), by = building_class][,
+    gross_square_feet := round(impute.mean(gross_square_feet)), by = building_class]
+
+# remove rows with missing building class data
+test_set <- test_set[!test_set$building_class == ""]
+
+# replace missing values with rounded mean
+test_set[, year_built := round(impute.mean(year_built)), by = neighborhood]
+
+# remove last rows with missing value
+test_set <- na.omit(test_set)
+
+# remove selected columns
+test_set <- select(test_set, -c("block", "lot", "apartment_number", "address"))
+
+# remove selected columns
+test_set <- select(test_set, -c("building_class_category", "building_class_at_time_of_sale", "tax_class_at_time_of_sale"))
+
+# remove selected columns
+test_set <- select(test_set, -c("total_units"))
+
+# remove selected columns
+test_set <- select(test_set, -c("zip_code"))
+
+# remove selected columns
+test_set <- select(test_set, -c("land_square_feet"))
+
+# create sale_year and sale_month column
+test_set <- test_set %>%
+  mutate(sale_year = year(sale_date),
+         sale_month = month(sale_date))
+
+# remove original column
+test_set <- select(test_set, -c("sale_date"))
+
+# one hot encode borough
+test_set$borough <- as.character(test_set$borough)
+dmy <- dummyVars(" ~ borough", data = test_set)
+ohe_borough <- data.frame(predict(dmy, newdata = test_set))
+
+# one hot encode neighborhood
+test_set$neighborhood <- as.character(test_set$neighborhood)
+dmy <- dummyVars(" ~ neighborhood", data = test_set)
+ohe_neighborhood <- data.frame(predict(dmy, newdata = test_set))
+
+# one hot encode building_class
+test_set$building_class <- as.character(test_set$building_class)
+dmy <- dummyVars(" ~ building_class", data = test_set)
+ohe_building_class <- data.frame(predict(dmy, newdata = test_set))
+
+# one hot encode tax_class
+test_set$tax_class <- as.character(test_set$tax_class)
+dmy <- dummyVars(" ~ tax_class", data = test_set)
+ohe_tax_class <- data.frame(predict(dmy, newdata = test_set))
+
+# remove original columns from dataset
+test_set <- select(test_set, -c("borough", "neighborhood", "building_class", "tax_class"))
+
+# add one hot encoded columns
+test_set <- cbind(test_set, ohe_borough, ohe_neighborhood, ohe_building_class, ohe_tax_class)
+```
+
+It should be noted now that the test set and train set have a different number of columns due to the one hot encoding. To handle this, I will remove any columns in the training set which do not exist in the test set.
+
+```{r}
+# find intersecting columns
+cols_to_keep <- c(intersect(colnames(train_set), colnames(test_set)))
+
+# remove columns which do not intersect
+train_set <- select(train_set, cols_to_keep)
+test_set <- select(test_set, cols_to_keep)
+```
+And lastly, I must seperate the sale price data from the test set.
+
+```{r}
+test_set_log_sale_prices <- test_set$log_sale_price
+test_set <- select(test_set, -c("log_sale_price"))
+```
+
+## Model 1
+
+The first model that I will create will be a linear model with all the data that I cleaned, created, and transformed throughout the past sections.
+
+```{r}
+# create  linear model
+model_v1 = lm(formula = log_sale_price ~ ., data = train_set)
+summary(model_v1)
+```
+
+## Model 1 Performance
+
+```{r}
+model_v1_predictions <- predict(model_v1, newdata = test_set)
+rmse(test_set_log_sale_prices, model_v1_predictions)
+```
+```{r}
+# quantiles
+quantile(test_set_log_sale_prices, c(0.25, 0.5, 0.75))
+```
+## Model 2
+
+The second model that I will create will be a generalized linear model with all the data that I cleaned, created, and transformed throughout the past sections.
+
+```{r}
+model_v2 = glm(formula = log_sale_price ~ 1 + ., 
+              data = train_set,
+              family = gaussian(link = "identity"))
+summary(model_v2)
+```
+## Model 2 Performance
+
+```{r}
+model_v2_predictions <- model_v2 %>% predict(test_set)
+RMSE(test_set_log_sale_prices, model_v2_predictions)
+```
+
+## Model Comparison
+
+The models performed similarly.
+
 
