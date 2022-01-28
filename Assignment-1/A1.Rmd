@@ -24,6 +24,7 @@ require(lubridate)
 require(reshape2)
 require(e1071)
 require(Metrics)
+require(car)
 ```
 
 ```{r}
@@ -123,16 +124,36 @@ Now let's see what we're working with.
 # summarize sale prices
 summary(train_set$sale_price)
 ```
+There are still some houses with extremely low prices that do not make sense. I will manually cut off the price at 1000 to remove anything below.
+```{r}
+# remove cheap houses
+train_set <- train_set[!train_set$sale_price <= 1000]
+```
+
 ```{r}
 # sale price histogram
 hist(train_set$sale_price)
+```
+There still seems to be some serious outliers in this dataset. For this regression analysis, I believe removing them will help our model.
+
+```{r}
+# quantiles
+quant_01 = quantile(train_set$sale_price, 0.01)
+quant_99 = quantile(train_set$sale_price, 0.99)
+```
+```{r}
+train_set <- train_set[train_set$sale_price > quant_01 & train_set$sale_price < quant_99]
+```
+
+```{r}
+summary(train_set$sale_price)
 ```
 
 ```{r}
 # calculate skewness
 skewness(train_set$sale_price)
 ```
-That's better, however, it's a bit skewed. Perhaps the log normal sale price will look better.
+The data seems a bit skewed. Perhaps the log normal sale price will look better.
 
 ```{r}
 # log normal sale price
@@ -313,8 +334,8 @@ hist(train_set$commercial_units[train_set$building_class == "I1"],
 hist(train_set$commercial_units[train_set$building_class == "N9"],
      main = "Building Class: N9",
      xlab = "Commercial Units")
-hist(train_set$commercial_units[train_set$building_class == "Y3"],
-     main = "Building Class: Y3",
+hist(train_set$commercial_units[train_set$building_class == "P2"],
+     main = "Building Class: P2",
      xlab = "Commercial Units")
 ```
 
@@ -606,7 +627,7 @@ Next, I will extract the year and month from the sale_date column.
 
 ```{r}
 # create sale_year and sale_month column
-train_set %>%
+train_set <- train_set %>%
   mutate(sale_year = year(sale_date),
          sale_month = month(sale_date))
 
@@ -845,9 +866,11 @@ model_v1_predictions <- predict(model_v1, newdata = test_set)
 rmse(test_set_log_sale_prices, model_v1_predictions)
 ```
 ```{r}
-# quantiles
-quantile(test_set_log_sale_prices, c(0.25, 0.5, 0.75))
+# residual plots
+par(mfrow = c(2,2))
+plot(model_v1)
 ```
+
 ## Model 2
 
 The second model that I will create will be a generalized linear model with all the data that I cleaned, created, and transformed throughout the past sections.
@@ -863,6 +886,11 @@ summary(model_v2)
 ```{r}
 model_v2_predictions <- model_v2 %>% predict(test_set)
 RMSE(test_set_log_sale_prices, model_v2_predictions)
+```
+```{r}
+# residual plots
+par(mfrow = c(2,2))
+plot(model_v2)
 ```
 
 ## Model Comparison
