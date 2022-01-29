@@ -10,6 +10,11 @@ output: html_document
 ## Initial Set Up
 
 ```{r}
+# fix memory issues
+memory.limit(100000)
+```
+
+```{r}
 # imports
 require(ggplot2)
 require(stringr)
@@ -25,6 +30,8 @@ require(reshape2)
 require(e1071)
 require(Metrics)
 require(car)
+require(randomForest)
+require(glmnet)
 ```
 
 ```{r}
@@ -665,18 +672,18 @@ train_set$tax_class <- as.character(train_set$tax_class)
 dmy <- dummyVars(" ~ tax_class", data = train_set)
 ohe_tax_class <- data.frame(predict(dmy, newdata = train_set))
 
-# remove original columns from dataset
-train_set <- select(train_set, -c("borough", "neighborhood", "building_class", "tax_class"))
-
 # add one hot encoded columns
-train_set <- cbind(train_set, ohe_borough, ohe_neighborhood, ohe_building_class, ohe_tax_class)
+ohe_train_set <- cbind(train_set, ohe_borough, ohe_neighborhood, ohe_building_class, ohe_tax_class)
+
+# remove original columns from dataset
+ohe_train_set <- select(ohe_train_set, -c("borough", "neighborhood", "building_class", "tax_class"))
 ```
 
 ## RQ1.3
 
 ```{r}
 # correlation matrix
-res <- cor(train_set)
+res <- cor(ohe_train_set)
 correlation_matrix <- round(res,2)
 correlation_matrix <- data.frame(correlation_matrix)
 
@@ -698,6 +705,8 @@ Features used:
 - neighborhood (one hot encoded)
 - building_class (one hot encoded)
 - tax class (one hot encoded)
+
+A more thorough analysis of these variables is provided in the section above as they are being created.
 
 # Part 2: Prediction using Regression Models
 
@@ -825,28 +834,28 @@ test_set$tax_class <- as.character(test_set$tax_class)
 dmy <- dummyVars(" ~ tax_class", data = test_set)
 ohe_tax_class <- data.frame(predict(dmy, newdata = test_set))
 
-# remove original columns from dataset
-test_set <- select(test_set, -c("borough", "neighborhood", "building_class", "tax_class"))
-
 # add one hot encoded columns
-test_set <- cbind(test_set, ohe_borough, ohe_neighborhood, ohe_building_class, ohe_tax_class)
+ohe_test_set <- cbind(test_set, ohe_borough, ohe_neighborhood, ohe_building_class, ohe_tax_class)
+
+# remove original columns from dataset
+ohe_test_set <- select(ohe_test_set, -c("borough", "neighborhood", "building_class", "tax_class"))
 ```
 
 It should be noted now that the test set and train set have a different number of columns due to the one hot encoding. To handle this, I will remove any columns in the training set which do not exist in the test set.
 
 ```{r}
 # find intersecting columns
-cols_to_keep <- c(intersect(colnames(train_set), colnames(test_set)))
+cols_to_keep <- c(intersect(colnames(ohe_train_set), colnames(ohe_test_set)))
 
 # remove columns which do not intersect
-train_set <- select(train_set, cols_to_keep)
-test_set <- select(test_set, cols_to_keep)
+ohe_train_set <- select(ohe_train_set, cols_to_keep)
+ohe_test_set <- select(ohe_test_set, cols_to_keep)
 ```
 And lastly, I must seperate the sale price data from the test set.
 
 ```{r}
-test_set_log_sale_prices <- test_set$log_sale_price
-test_set <- select(test_set, -c("log_sale_price"))
+ohe_test_set_log_sale_prices <- ohe_test_set$log_sale_price
+ohe_test_set <- select(ohe_test_set, -c("log_sale_price"))
 ```
 
 ## Model 1
@@ -855,15 +864,16 @@ The first model that I will create will be a linear model with all the data that
 
 ```{r}
 # create  linear model
-model_v1 = lm(formula = log_sale_price ~ ., data = train_set)
+model_v1 = lm(formula = log_sale_price ~ ., data = ohe_train_set)
 summary(model_v1)
 ```
 
 ## Model 1 Performance
 
 ```{r}
-model_v1_predictions <- predict(model_v1, newdata = test_set)
-rmse(test_set_log_sale_prices, model_v1_predictions)
+# model performance
+model_v1_predictions <- predict(model_v1, newdata = ohe_test_set)
+rmse(ohe_test_set_log_sale_prices, model_v1_predictions)
 ```
 ```{r}
 # residual plots
@@ -873,20 +883,18 @@ plot(model_v1)
 
 ## Model 2
 
-The second model that I will create will be a generalized linear model with all the data that I cleaned, created, and transformed throughout the past sections.
+The second model that I will create will be a random forest model with all the data that I cleaned, created, and transformed throughout the past sections.
 
 ```{r}
-model_v2 = glm(formula = log_sale_price ~ 1 + ., 
-              data = train_set,
-              family = gaussian(link = "identity"))
-summary(model_v2)
+model_v2 <- randomForest(formula = log_sale_price ~ ., data = train_set)
 ```
-## Model 2 Performance
 
 ```{r}
+# Model Performance
 model_v2_predictions <- model_v2 %>% predict(test_set)
 RMSE(test_set_log_sale_prices, model_v2_predictions)
 ```
+
 ```{r}
 # residual plots
 par(mfrow = c(2,2))
@@ -895,6 +903,6 @@ plot(model_v2)
 
 ## Model Comparison
 
-The models performed similarly.
+The random forest model outperformed the linear model as expected as it is able to detect more complex relationships between variables.
 
 
